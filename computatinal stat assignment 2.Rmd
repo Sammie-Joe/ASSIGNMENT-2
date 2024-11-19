@@ -1,0 +1,641 @@
+---
+title: "COMPUTATIONAL STATISTICS (ASSIGNMENT 2)"
+author: "ELUWA SAMUEL IFEANYI"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(table1)
+```
+
+## QUESTION 1 SOLUTION
+
+1. Data Generation
+Steps:
+
+    Set up parameters:
+  $$\beta_0=0.1,\beta_1=1.1, \beta_2= \neg0.9$$
+    
+ 2. Generate covariates: Sample 
+  $$x_1\ ^(\ ^n\ ^)\ and\ x_2\ ^(\ ^n\ ^) for\  n=1,……,N\  from\  Uniform[\neg2,2].$$
+3. Compute probabilities: Use the logistic function:
+
+$$p\left(y^{(n)}_i = 1 \mid x^{(n)}_1, x^{(n)}_2 \right) = \frac{1}{1 + \exp\left(\neg\left(\beta_0 + \beta_1 x^{(n)}_1 + \beta_2 x^{(n)}_2\right)\right)}$$
+
+  
+4. Generate binary responses: Sample $$y\ ^(\ ^n\ ^) from \ Bernoulli(p)$$.
+    Report proportions: Compute the proportion of 0s and 1s.
+
+R Code:
+
+
+```{r pressure1, echo=TRUE}
+# 1a,
+generate_logistic_data <- function(N) {
+  # Set the true intercept and regression coefficients
+  intercept <- 0.1
+  beta1 <- 1.1
+  beta2 <- -0.9
+
+# (1b) Generate N random values for the two covariates from Uniform[-2, 2]
+  covariate1 <- runif(N, -2, 2)
+  covariate2 <- runif(N, -2, 2)
+  
+  # Calculate the linear predictor (log-odds) for the logistic model
+  log_odds <- intercept + beta1 * covariate1 + beta2 * covariate2
+  
+  # Convert log-odds to probabilities using the logistic function
+  probabilities <- 1 / (1 + exp(-log_odds))
+
+# Generate binary responses (0 or 1) based on these probabilities
+  res <- rbinom(N, 1, probabilities)
+  
+  # Combine into a data frame for easy viewing and return the data
+  data_1<- data.frame(covariate1 = covariate1, covariate2 = covariate2, response = res)
+  return(data_1)
+}
+
+# Example usage:
+set.seed(123) # For reproducibility
+data_generated1 <- generate_logistic_data(10)
+table1::table1(~factor(data_generated1$response))
+```
+
+Overall (N=10): The sample size is 10, meaning there are 10 observations 
+in total.
+
+0: 5 (50.0%): Out of 10 total responses, 5 observations (50%) have the value 0.
+1: 5 (50.0%): The remaining 5 observations (50%) have the value 1.
+
+So, the variable response has an equal split between the two categories 0 and 1,
+with each category representing half of the dataset.
+
+```{r pressure113, echo=TRUE}
+data_generated2 <- generate_logistic_data(50)
+table1::table1(~factor(data_generated2$response))
+```
+
+
+Overall (N=50): The dataset contains 50 total observations.
+factor(data_generated2$response): This is the variable under analysis, 
+and it has two possible values, 0 and 1.
+0: 25 (50.0%): Out of the 50 responses, 25 (or 50%) have the value 0.
+1: 25 (50.0%): The other 25 (or 50%) have the value 1.
+
+In summary The responses are evenly split between the two categories, 0 and 1, 
+with each category making up exactly half (50%) of the dataset. 
+This suggests a balanced distribution between the two response types 
+in data_generated2.
+
+```{r pressure111, echo=TRUE}
+data_generated3 <- generate_logistic_data(100)
+table1::table1(~factor(data_generated3$response))
+
+```
+
+Overall (N=100): There are 100 observations in this dataset.
+factor(data_generated3$response): This is the variable being analyzed, 
+which has two possible values: 0 and 1.
+0: 38 (38.0%): Out of 100 responses, 38 (or 38%) have the value 0.
+1: 62 (62.0%): The remaining 62 responses (or 62%) have the value 1.
+
+The majority of responses are 1, making up 62% of the total, while 0 represents
+38%. This indicates an uneven distribution, with a tendency towards 1 as the
+more frequent response.
+
+```{r}
+
+```
+
+## QUESTION 2 (Bayesian Inference Using Importance Sampling)
+
+Steps:
+
+1.Prior and Proposal:
+    Use independent standard Gaussian priors for beta.
+    Use a spherical multivariate normal proposal with large enough variance.
+    
+2.Importance Sampling:
+    Compute the weights:
+  $$w(\beta)\alpha \frac{Likelihood(Data|\beta)×Prior(\beta)}{Proposal(\beta)}$$
+       
+    Normalize weights.
+3.Posterior Means: Use the weighted sample mean to estimate posterior means.
+
+4.Resampling and Histogram:
+    (a). Resample beta with probabilities proportional to importance weights.
+    (b).Plot histograms of the resampled values.
+    
+5. Effective Sample Size (ESS):
+    $$ESS=\frac{(\sum w_i)\ ^2}{\sum\ w_i\ ^2}$$
+
+
+```{r pressure2, echo=TRUE}
+# Required packages
+library(MASS)
+library(mvtnorm)
+
+# Generate sample data
+set.seed(123)
+n <- 100
+x1 <- rnorm(n)
+x2 <- rnorm(n)
+beta_true <- c(-0.5, 1.2, -0.8)
+logit <- beta_true[1] + beta_true[2] * x1 + beta_true[3] * x2
+prob <- 1 / (1 + exp(-logit))
+y <- rbinom(n, 1, prob)
+
+# Define functions
+log_likelihood <- function(beta, x1, x2, y) {
+  logit <- beta[1] + beta[2] * x1 + beta[3] * x2
+  prob <- 1 / (1 + exp(-logit))
+  sum(dbinom(y, size = 1, prob = prob, log = TRUE))
+}
+
+log_prior <- function(beta) {
+  sum(dnorm(beta, mean = 0, sd = 1, log = TRUE))
+}
+
+log_posterior <- function(beta, x1, x2, y) {
+  log_likelihood(beta, x1, x2, y) + log_prior(beta)
+}
+```
+
+# Proposal distribution
+
+```{r pressure3, echo=TRUE}
+# Proposal distribution
+p <- 3
+proposal_mean <- rep(0, p)
+proposal_sd <- 2
+proposal_cov <- diag(proposal_sd^2, p)
+```
+
+
+```{r pressure4, echo=FALSE}
+
+```
+
+#Importance sampling 
+```{r pressure5, echo=TRUE}
+# Importance sampling
+N <- 10000
+proposal_samples <- MASS::mvrnorm(N, mu = proposal_mean, Sigma = proposal_cov)
+log_posterior_vals <- apply(proposal_samples, 1, log_posterior, x1 = x1, x2 = x2, y = y)
+log_proposal_vals <- dmvnorm(proposal_samples, mean = proposal_mean, sigma = proposal_cov, log = TRUE)
+log_weights <- log_posterior_vals - log_proposal_vals
+weights <- exp(log_weights - max(log_weights))
+weights <- weights / sum(weights)
+```
+
+
+
+```{r pressure6, echo=FALSE}
+
+```
+
+
+#Posterior estimates
+```{r pressure7, echo=TRUE}
+# Posterior estimates
+posterior_means <- colSums(weights * proposal_samples)
+posterior_se <- sqrt(colSums(weights * (proposal_samples - posterior_means)^2))
+effective_sample_size <- sum(weights)^2 / sum(weights^2)
+```
+
+
+```{r pressure8, echo=FALSE}
+
+```
+
+#Resample and plot histograms
+
+```{r pressure9, echo=TRUE}
+# Resample and plot histograms
+resample_indices <- sample(1:N, size = N, replace = TRUE, prob = weights)
+resampled_samples <- proposal_samples[resample_indices, ]
+par(mfrow = c(1, 3))
+hist(resampled_samples[, 1], main = "Posterior of beta0", xlab = "beta0")
+hist(resampled_samples[, 2], main = "Posterior of beta1", xlab = "beta1")
+hist(resampled_samples[, 3], main = "Posterior of beta2", xlab = "beta2")
+```
+The image shows the posterior distributions of three parameters, 
+likely regression
+coefficients (beta 0, beta 1, and beta 2), from a Bayesian model. 
+Here’s a breakdown of each plot:
+
+Posterior of beta 0: This distribution is centered around approximately -0.7.
+The shape is bell-like, indicating a normal distribution with most of 
+the posterior probability concentrated near the center. This suggests that 
+the posterior estimate for beta0 is around -0.7 with some uncertainty, 
+as indicated by the spread.
+
+Posterior of beta1: This distribution is centered around 1.2, with a similar
+bell like shape. This indicates that the posterior estimate for beta1 is 
+around 1.2, with most of the probability mass concentrated close to this value.
+The uncertainty is also present, but it appears somewhat narrower than that of 
+beta0, suggesting a more precise estimate.
+
+Posterior of beta2: This distribution is centered around -1.2, again with a 
+normal shape. This suggests a posterior estimate of approximately -1.2 for
+beta2, with a similar spread as beta0.
+
+Overall, these posterior distributions show the Bayesian estimates for each 
+parameter (beta0, beta1, and beta2), with their respective centers and spreads.
+The spread of each distribution reflects the uncertainty in each parameter's
+estimate, with beta1 appearing to be the most precisely estimated among the three.
+
+
+```{r pressure10, echo=FALSE}
+
+```
+
+# Logistic regression MLE estimates
+```{r pressure11, echo=TRUE}
+# Logistic regression MLE estimates
+fit <- glm(y ~ x1 + x2, family = binomial(link = "logit"))
+mle_estimates <- coef(fit)
+
+# Results
+cat("Posterior Means:\n", posterior_means, "\n")
+cat("Posterior Standard Errors:\n", posterior_se, "\n")
+cat("Effective Sample Size:\n", effective_sample_size, "\n")
+cat("MLE Estimates:\n", mle_estimates, "\n")
+```
+Posterior Means
+
+Posterior Means: [-0.602676,1.111875,-0.8990812]
+
+These are the expected values of the parameters under the posterior distribution.
+They represent the "best guess" of the parameters after accounting for both the
+prior and the likelihood of the data.
+The posterior means are adjusted versions of the MLE estimates, influenced by 
+the prior distribution (if it has significant weight).
+
+
+Posterior Standard Errors
+Posterior Standard Errors: [1.106749,1.532534,0.9983331]
+
+These measure the uncertainty (spread) around the posterior means 
+for each parameter.
+The first parameter has a standard error of 1.106749, indicating 
+moderate uncertainty.
+The second parameter has the highest standard error (1.532534), reflecting 
+greater uncertainty in its estimation.The third parameter (0.9983331) has the 
+lowest uncertainty.
+
+Large standard errors might suggest insufficient data or high variability 
+in the parameter's influence on the data.
+    
+    
+Effective Sample Size (ESS)
+
+Effective Sample Size: 46.78071
+
+The ESS indicates the number of independent samples effectively obtained from 
+the MCMC sampling process.
+A low ESS (e.g., below 100) can suggest issues like poor mixing or
+autocorrelation in the chain.
+With ESS approximately 47, there is room for improvement in the sampling strategy.
+Increasing the number of iterations or improving the proposal distribution 
+could yield more reliable posterior estimates.
+
+Maximum Likelihood Estimates (MLE):
+
+MLE Estimates: [-0.5984355,1.170942,-0.9529896]
+
+MLE estimates are purely data-driven and represent the parameter values that
+maximize the likelihood function.Unlike posterior means, MLE estimates do not 
+incorporate prior information or uncertainty, making them more sensitive to 
+data variability.
+
+```{r pressure12, echo=FALSE}
+
+
+```
+
+
+## QUESTION 3 (Increasing Dimensionality)
+
+#Now, increase the dimensionality of your problem from 3 to 9 by adding six extra simulated covariates. Repeat the experiment above. How does your 
+effective sample size change?
+
+```{r pressure13, echo=TRUE,results = 'asis', warning = FALSE, message = FALSE}
+set.seed(123)
+true_beta <- c(0.1, 1.1, -0.9, 0.5, -0.3, 0.7, -0.6, 0.4, -0.2)
+
+# Function to generate logistic regression data with 9 covariates
+generate_logistic_data_high_dim <- function(N) {
+  # Generate 9 covariates uniformly from [-2, 2]
+  x <- matrix(runif(N * 8, -2, 2), ncol = 8)
+  # Compute logistic probability
+  logit_p <-  true_beta[1] + x %*% true_beta[-1]
+  p <- 1 / (1 + exp(-logit_p))
+  # Generate binary response
+  y <- rbinom(N, 1, p)
+  return(data.frame(y = y, x))
+}
+
+# Log-likelihood function for 9-dimensional logistic regression
+log_likelihood_high_dim <- function(beta, x, y) {
+  # Compute logit probabilities
+  logit_p <-  true_beta[1] + x %*% true_beta[-1]
+  p <- 1 / (1 + exp(-logit_p))
+  # Sum of log-likelihood
+  ll <- sum(y * log(p) + (1 - y) * log(1 - p))
+  return(ll)
+}
+
+# Importance sampling for Bayesian inference in 9 dimensions
+importance_sampling_high_dim <- function(N, M = 10000, proposal_sd = 3) {
+  # Generate data
+  data <- generate_logistic_data_high_dim(N)
+  x <- as.matrix(data[, -1])
+  y <- data$y
+  
+  # Proposal samples: multivariate normal samples in 9D
+  proposal_samples <- matrix(rnorm(M * 9, mean = 0, sd = proposal_sd), ncol = 9)
+  
+  # Calculate log-likelihood and log-prior for each sample
+  log_likelihoods <- apply(proposal_samples,1,log_likelihood_high_dim, x = x, y = y)
+  log_priors <- rowSums(dnorm(proposal_samples, mean = 0, sd = 1, log = TRUE))
+  
+  # Compute log-weights and normalize
+  log_weights <- log_likelihoods + log_priors
+  max_log_weight <- max(log_weights)
+  weights <- exp(log_weights - max_log_weight) / sum(exp(log_weights - max_log_weight))
+  
+  # Posterior means and standard errors
+  posterior_means <- colSums(proposal_samples * weights)
+  posterior_se <- sqrt(colSums((proposal_samples - posterior_means)^2 * weights))
+  
+  # Effective Sample Size (ESS)
+  ess <- 1 / sum(weights^2)
+  
+  # Histogram of posterior samples for each parameter
+  par(mfrow = c(3, 3))
+  for (i in 1:9) {
+    hist(proposal_samples[, i], weights=weights, main = paste("Beta", i - 1), 
+         xlab = paste("Beta", i - 1), probability = TRUE)
+  }
+  
+  
+  # Compare with MLE
+  glm_fit <- glm(y ~ ., data = data, family = binomial())
+  mle <- coef(glm_fit)
+  
+  cat("Sample size:", N, "\n")
+  cat("Posterior means:", posterior_means, "\n")
+  cat("Standard errors:", posterior_se, "\n")
+  cat("Effective Sample Size (ESS):", ess, "\n")
+  cat("MLEs from glm:", mle, "\n")
+  cat("Difference (Posterior mean - MLE):", posterior_means - mle, "\n\n")
+  
+  return(list(posterior_means = posterior_means, posterior_se = posterior_se, ess = ess))
+  # Sample sizes to test
+
+}
+
+
+sample_sizes <- c(10, 50, 100)
+# Run Bayesian inference with importance sampling for each sample size in 9D
+for (N in sample_sizes) {
+  result <- importance_sampling_high_dim(N)
+}
+```
+
+The graphs shows a series of histograms representing the posterior 
+distributions of regression coefficients (denoted as Beta 0 through Beta 8). 
+
+Each plot corresponds to a single regression coefficient 
+(Beta 0, Beta 1, ..., Beta 8):
+  The x-axis shows the values of the coefficient.
+  The y-axis shows the density, reflecting how likely different values are 
+  under the posterior distribution.
+
+Shape of the distributions:
+  The histograms are approximately symmetric and bell-shaped, 
+  indicating normal-like distributions for the coefficients. 
+  Most of the density for each coefficient is concentrated around zero, 
+  implying that the coefficients are likely to have small or moderate values.
+
+Width of the distributions:
+  Narrower distributions indicate higher certainty about the coefficient value.
+  Wider distributions suggest greater uncertainty.
+
+Center of distributions:
+  The peak (mode) of each histogram represents the most probable value for the    
+  corresponding coefficient.If the peak is at or near zero, it suggests that 
+  the corresponding predictor variable may have little to no effect.
+
+in summary This is Bayesian regression analysis, where posterior distributions 
+of coefficients are examined to assess their likely values and variability. 
+In this case,  the coefficients are mostly centered around zero, with moderate 
+variability, which  indicate weak or moderate effects of the predictors.
+
+The effective sample size (ESS) is expected to decrease significantly when increasing the dimensionality of the problem from 3 to 9 covariates.
+
+```{r}
+
+```
+
+## QUESTION 4(Smarter Proposal)
+
+#Now try the experiment using a smarter proposal. For instance, you can center the proposal at the posterior mode that you find with an optimization method. How do your results change? Are you achieving a better sample size?
+
+Modify the proposal mean to the posterior mode (computed via optimization)
+
+```{r pressure14, echo=TRUE}
+library(MASS)  # For mvrnorm
+library(mvtnorm)  # For dmvnorm
+
+set.seed(123)
+
+# Sample size and number of covariates
+n <- c(10,50,100)
+p <- 8
+
+# Simulate covariates
+X <- matrix(rnorm(n * p), n, p)
+
+# True coefficients
+beta_true <- rnorm(p + 1, 0, 1)
+
+# Generate outcome y with logistic model
+logit <- beta_true[1] + X %*% beta_true[-1]
+prob <- 1 / (1 + exp(-logit))
+y <- rbinom(n, 1, prob)
+
+# Log-likelihood function
+log_likelihood <- function(beta, X, y) {
+  logit <- beta[1] + X %*% beta[-1]
+  prob <- 1 / (1 + exp(-logit))
+  sum(dbinom(y, size = 1, prob = prob, log = TRUE))
+}
+
+# Log-prior function (independent Gaussian priors)
+log_prior <- function(beta) {
+  sum(dnorm(beta, mean = 0, sd = 1, log = TRUE))
+}
+
+# Log-posterior function
+log_posterior <- function(beta, X, y) {
+  log_likelihood(beta, X, y) + log_prior(beta)
+}
+
+# Proposal distribution parameters
+proposal_mean <- rep(0, p + 1)
+proposal_sd <- 5  # Chosen to capture posterior variation
+proposal_cov <- diag(proposal_sd^2, p + 1)
+
+# Number of importance samples
+N <- 10000
+
+# Draw samples from the proposal distribution
+proposal_samples <- MASS::mvrnorm(N, mu = proposal_mean, Sigma = proposal_cov)
+
+# Compute log-posterior for each sample
+log_posterior_vals <- apply(proposal_samples,1, function(beta) log_posterior(beta, X = X, y = y))
+
+
+
+# Compute log of proposal density for each sample
+log_proposal_vals <- dmvnorm(proposal_samples, mean = proposal_mean, sigma = proposal_cov, log = TRUE)
+
+# Compute importance weights (unnormalized)
+log_weights <- log_posterior_vals - log_proposal_vals
+weights <- exp(log_weights - max(log_weights))
+weights <- weights / sum(weights)  # Normalize weights
+
+# Posterior means
+posterior_means <- colSums(weights * proposal_samples)
+
+# Posterior standard errors
+posterior_se <- sqrt(colSums(weights * (proposal_samples - posterior_means)^2))
+
+# Effective sample size
+effective_sample_size <- sum(weights)^2 / sum(weights^2)
+
+# Resample indices according to weights
+resample_indices <- sample(1:N, size = N, replace = TRUE, prob = weights)
+resampled_samples <- proposal_samples[resample_indices, ]
+
+# Plot histograms for each parameter
+par(mfrow = c(3, 3))
+for (i in 1:(p + 1)) {
+  hist(resampled_samples[, i], main = paste("Posterior of beta", i - 1), xlab = paste("beta", i - 1))
+}
+
+# Optimize to find posterior mode
+optim_results <- optim(par = rep(0, p + 1), fn = function(b) -log_posterior(b, X, y), method = "BFGS")
+posterior_mode <- optim_results$par
+
+# Updated proposal distribution centered at posterior mode
+proposal_mean_optimized <- posterior_mode
+proposal_sd_optimized <- 2  # Adjust to be smaller, closer to posterior spread
+proposal_cov_optimized <- diag(proposal_sd_optimized^2, p + 1)
+
+# Draw samples from the optimized proposal
+proposal_samples_optimized <- MASS::mvrnorm(N, mu = proposal_mean_optimized, Sigma = proposal_cov_optimized)
+
+# Compute log-posterior for each sample
+log_posterior_vals_optimized <- apply(proposal_samples_optimized, 1, function(beta) log_posterior(beta, X = X, y = y))
+
+
+# Compute log of optimized proposal density for each sample
+log_proposal_vals_optimized <- dmvnorm(proposal_samples_optimized, mean = proposal_mean_optimized, sigma = proposal_cov_optimized, log = TRUE)
+
+# Compute importance weights (unnormalized)
+log_weights_optimized <- log_posterior_vals_optimized - log_proposal_vals_optimized
+weights_optimized <- exp(log_weights_optimized - max(log_weights_optimized))
+weights_optimized <- weights_optimized / sum(weights_optimized)  # Normalize weights
+
+# Posterior means with optimized proposal
+posterior_means_optimized <- colSums(weights_optimized * proposal_samples_optimized)
+
+# Posterior standard errors with optimized proposal
+posterior_se_optimized <- sqrt(colSums(weights_optimized * (proposal_samples_optimized - posterior_means_optimized)^2))
+
+# Effective sample size with optimized proposal
+effective_sample_size_optimized <- sum(weights_optimized)^2 / sum(weights_optimized^2)
+
+# Display results for both proposals
+cat("Results with Simple Proposal:\n")
+cat("Posterior Means:\n", posterior_means, "\n")
+cat("Posterior Standard Errors:\n", posterior_se, "\n")
+cat("Effective Sample Size:\n", effective_sample_size, "\n\n")
+
+cat("Results with Optimized Proposal:\n")
+cat("Posterior Means:\n", posterior_means_optimized, "\n")
+cat("Posterior Standard Errors:\n", posterior_se_optimized, "\n")
+cat("Effective Sample Size:\n", effective_sample_size_optimized, "\n")
+
+
+
+```
+
+Parameters like beta have more concentrated posteriors, indicating greater certainty and possibly strong data evidence.
+    Others (beta1, beta6,beta4) show wider distributions, reflecting greater uncertainty or weak identifiability from the data.
+    Distributions skewed or extending significantly away from 0 (e.g., beta6) might suggest nonlinear effects or outliers affecting the model.
+
+These plots help identify which parameters are well-estimated and which require further investigation (e.g., improving priors, adding more data, or refining the model).
+
+```{r}
+
+```
+
+## QUESTION 5
+
+## In Bayesian inference problems, parameters are typically dependent in the posterior. How can you set the covariance of the proposal in a smarter way than using a proposal with independent coordinates. Think of possible solutions here. There is no correct answer here.
+
+
+Smarter Covariance
+
+Use the covariance matrix of the posterior distribution, approximated by the inverse Hessian of the log-posterior at the mode. This requires numerical optimization and calculation of the Hessian.
+R Code:
+
+```{r pressure15, echo=TRUE}
+library(numDeriv)
+
+optimize_posterior <- function(data) {
+  neg_log_posterior <- function(beta) {
+    -log_likelihood(beta) - log_prior(beta)
+  }
+  opt <- optim(rep(0, 3), neg_log_posterior, hessian = TRUE)
+  list(mean = opt$par, covariance = solve(opt$hessian))
+}
+
+# Update the importance sampling function to use the optimized proposal
+
+```
+## SOLUTION
+
+The provided code defines a function, optimize_posterior, which performs optimization to find the posterior mode of a Bayesian model and calculates the covariance matrix based on the inverse Hessian at the mode. Here's a breakdown of what the code does and what the output would be if run correctly:
+
+Key Components:
+
+Negative Log Posterior (neg_log_posterior):
+Combines the log likelihood and log prior into a single function for minimization.
+Assumes the log_likelihood(beta) and log_prior(beta) functions are defined 
+elsewhere in the code.
+
+Optimization (optim):
+optim starts the search for the posterior mode at rep(0, 3) 
+(initial guess for the parameters).
+It minimizes the negative log posterior function.
+
+Hessian Calculation:
+The hessian= TRUE argument ensures optim estimates the Hessian 
+(second derivative matrix) of the negative log posterior at the mode.
+The covariance matrix of the posterior is obtained as the inverse of the Hessian.
+
+Output:
+  list(mean = opt$par, covariance = solve(opt$hessian)):
+  opt$par: The posterior mode (mean of the proposal distribution).
+  solve(opt$hessian): The covariance matrix of the posterior distribution 
+  (proposal covariance).
+
